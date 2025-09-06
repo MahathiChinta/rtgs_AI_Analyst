@@ -21,3 +21,4 @@ outputs/rag/*
 # System
 .DS_Store
 Thumbs.db
+outputs/
