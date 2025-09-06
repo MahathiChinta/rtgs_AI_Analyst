@@ -1,0 +1,6 @@
+pandas
+numpy
+python-dateutil
+sentence-transformers>=2.2.2
+faiss-cpu
+tqdm
