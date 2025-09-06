@@ -1,0 +1,23 @@
+{
+  "rows": 1078,
+  "columns": {
+    "year": {
+      "pct_missing": 0.0
+    },
+    "month": {
+      "pct_missing": 0.0
+    },
+    "division": {
+      "pct_missing": 0.0
+    },
+    "section": {
+      "pct_missing": 0.0
+    },
+    "noofbookings": {
+      "pct_missing": 0.0
+    },
+    "delivered": {
+      "pct_missing": 0.0
+    }
+  }
+}

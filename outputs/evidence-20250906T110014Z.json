@@ -1,0 +1,53 @@
+{
+  "question": "Which localities show the largest unmet tanker demand? Provide short policy recommendations.",
+  "hits": [
+    {
+      "id": "243",
+      "text": "year: 2024 | month: 3 | date: nan | location: 6 | booked: 1785 | delivered: 1736",
+      "score": 0.21708884835243225,
+      "meta": {
+        "row": 243
+      }
+    },
+    {
+      "id": "199",
+      "text": "year: 2024 | month: 3 | date: nan | location: 3 | booked: 218 | delivered: 218",
+      "score": 0.2124013751745224,
+      "meta": {
+        "row": 199
+      }
+    },
+    {
+      "id": "253",
+      "text": "year: 2024 | month: 3 | date: nan | location: 7 | booked: 193 | delivered: 193",
+      "score": 0.2091841846704483,
+      "meta": {
+        "row": 253
+      }
+    },
+    {
+      "id": "50",
+      "text": "year: 2024 | month: 12 | date: nan | location: 5 | booked: 404 | delivered: 404",
+      "score": 0.20859874784946442,
+      "meta": {
+        "row": 50
+      }
+    },
+    {
+      "id": "988",
+      "text": "year: 2024 | month: 8 | date: nan | location: 9 | booked: 193 | delivered: 193",
+      "score": 0.20845940709114075,
+      "meta": {
+        "row": 988
+      }
+    },
+    {
+      "id": "962",
+      "text": "year: 2024 | month: 8 | date: nan | location: 6 | booked: 1794 | delivered: 1794",
+      "score": 0.2069120556116104,
+      "meta": {
+        "row": 962
+      }
+    }
+  ]
+}

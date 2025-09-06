@@ -1,0 +1,87 @@
+{
+  "rows": 1078,
+  "cols": [
+    "year",
+    "month",
+    "date",
+    "location",
+    "booked",
+    "delivered",
+    "id",
+    "division",
+    "section",
+    "noofbookings",
+    "_source_file",
+    "booked_num",
+    "delivered_num",
+    "delivery_gap",
+    "pct_delivered"
+  ],
+  "missingness": {
+    "year": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "month": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "date": {
+      "missing": 1078,
+      "pct_missing": 100.0
+    },
+    "location": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "booked": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "delivered": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "id": {
+      "missing": 1078,
+      "pct_missing": 100.0
+    },
+    "division": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "section": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "noofbookings": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "_source_file": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "booked_num": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "delivered_num": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "delivery_gap": {
+      "missing": 0,
+      "pct_missing": 0.0
+    },
+    "pct_delivered": {
+      "missing": 0,
+      "pct_missing": 0.0
+    }
+  },
+  "delivery_gap_stats": {
+    "min": 0.0,
+    "median": 0.0,
+    "max": 92.0
+  }
+}

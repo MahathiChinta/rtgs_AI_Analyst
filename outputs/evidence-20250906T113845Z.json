@@ -1,0 +1,53 @@
+{
+  "question": "Which localities show the largest unmet tanker demand? Provide short policy recommendations.",
+  "hits": [
+    {
+      "id": "0",
+      "text": "year: 2024 | month: 12 | division: 1 | section: BAHADURPURA | noofbookings: 8 | delivered: 8 | date: 2024-12-01",
+      "score": 0.0,
+      "meta": {
+        "row_id": 0
+      }
+    },
+    {
+      "id": "1",
+      "text": "year: 2024 | month: 12 | division: 1 | section: CHANUDLAL BHARADARI | noofbookings: 3 | delivered: 3 | date: 2024-12-01",
+      "score": 0.0,
+      "meta": {
+        "row_id": 1
+      }
+    },
+    {
+      "id": "2",
+      "text": "year: 2024 | month: 12 | division: 1 | section: DARUL SHIFA | noofbookings: 1 | delivered: 1 | date: 2024-12-01",
+      "score": 0.0,
+      "meta": {
+        "row_id": 2
+      }
+    },
+    {
+      "id": "3",
+      "text": "year: 2024 | month: 12 | division: 1 | section: DHOOD BOWLI | noofbookings: 4 | delivered: 4 | date: 2024-12-01",
+      "score": 0.0,
+      "meta": {
+        "row_id": 3
+      }
+    },
+    {
+      "id": "4",
+      "text": "year: 2024 | month: 12 | division: 1 | section: HASSAN NAGAR | noofbookings: 2 | delivered: 2 | date: 2024-12-01",
+      "score": 0.0,
+      "meta": {
+        "row_id": 4
+      }
+    },
+    {
+      "id": "5",
+      "text": "year: 2024 | month: 12 | division: 1 | section: M.R.G.FILTERS | noofbookings: 1 | delivered: 1 | date: 2024-12-01",
+      "score": 0.0,
+      "meta": {
+        "row_id": 5
+      }
+    }
+  ]
+}

@@ -4,3 +4,8 @@ python-dateutil
 sentence-transformers>=2.2.2
 faiss-cpu
 tqdm
+python-dotenv
+openai
+sentence-transformers
+scikit-learn
+joblib

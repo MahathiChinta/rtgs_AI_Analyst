@@ -1,0 +1,47 @@
+{
+  "question": "Which months in 2024 had the highest tanker bookings, and what does this imply for resource planning?",
+  "evidence": [
+    {
+      "id": "81",
+      "score": 0.424167662858963,
+      "meta": {
+        "row": 81
+      }
+    },
+    {
+      "id": "130",
+      "score": 0.420108437538147,
+      "meta": {
+        "row": 130
+      }
+    },
+    {
+      "id": "402",
+      "score": 0.4200936555862427,
+      "meta": {
+        "row": 402
+      }
+    },
+    {
+      "id": "551",
+      "score": 0.4121330976486206,
+      "meta": {
+        "row": 551
+      }
+    },
+    {
+      "id": "256",
+      "score": 0.4116640090942383,
+      "meta": {
+        "row": 256
+      }
+    },
+    {
+      "id": "622",
+      "score": 0.41110146045684814,
+      "meta": {
+        "row": 622
+      }
+    }
+  ]
+}

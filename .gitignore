@@ -1,16 +1,23 @@
-# Environment
-.env
-
-# Python cache
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# System/IDE files
-.vscode/
-.idea/
-.DS_Store
+# Env
+.env
 
-# Data (raw should not be committed)
+# Data
 data/raw/*
+data/cleaned/*
+
+# Outputs (keep small artifacts, but not big binary)
+outputs/rag/*
+!outputs/rag/README.md
+
+# VSCode
+.vscode/
+
+# System
+.DS_Store
+Thumbs.db

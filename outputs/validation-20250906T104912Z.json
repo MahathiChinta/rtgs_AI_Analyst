@@ -1,0 +1,133 @@
+{
+  "file": "data\\cleaned\\tankers_cleaned_enhanced.csv",
+  "rows": 1078,
+  "cols": [
+    "year",
+    "month",
+    "date",
+    "location",
+    "booked",
+    "delivered",
+    "id",
+    "division",
+    "section",
+    "noofbookings",
+    "_source_file",
+    "booked_num",
+    "delivered_num",
+    "delivery_gap",
+    "pct_delivered"
+  ],
+  "checks": [
+    {
+      "name": "non_empty",
+      "ok": true,
+      "detail": "rows=1078"
+    },
+    {
+      "name": "missing_pct",
+      "col": "year",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "month",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "date",
+      "pct_missing": 100.0,
+      "ok": false
+    },
+    {
+      "name": "missing_pct",
+      "col": "location",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "booked",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "delivered",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "id",
+      "pct_missing": 100.0,
+      "ok": false
+    },
+    {
+      "name": "missing_pct",
+      "col": "division",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "section",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "noofbookings",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "_source_file",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "booked_num",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "delivered_num",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "delivery_gap",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "missing_pct",
+      "col": "pct_delivered",
+      "pct_missing": 0.0,
+      "ok": true
+    },
+    {
+      "name": "delivery_gap_no_negative",
+      "ok": true,
+      "detail": "neg_count=0"
+    },
+    {
+      "name": "delivery_gap_reasonable",
+      "ok": true,
+      "detail": "max=92.0"
+    },
+    {
+      "name": "num_locations",
+      "ok": true,
+      "detail": "col=location, nloc=27"
+    }
+  ]
+}
