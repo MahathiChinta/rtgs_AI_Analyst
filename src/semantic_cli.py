@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 src/semantic_cli.py
 
@@ -120,6 +119,44 @@ def save_outputs(evidence: List[Dict], report_text: str, question: str):
         json.dump({"ts": t, "question": question, "evidence_count": len(evidence)}, fh, indent=2)
     return ev_path, rpt_path, trace_path
 
+def run_deterministic_fallback(cleaned_csv_path: str):
+    """
+    Try to call src.quick_analytics.deterministic_fallback_summary if present,
+    otherwise run a minimal local summary.
+    """
+    try:
+        # preferred location
+        from src.quick_analytics import deterministic_fallback_summary
+    except Exception:
+        try:
+            from quick_analytics import deterministic_fallback_summary
+        except Exception:
+            deterministic_fallback_summary = None
+
+    if deterministic_fallback_summary:
+        try:
+            return deterministic_fallback_summary(cleaned_csv_path=cleaned_csv_path)
+        except Exception as e:
+            return f"(fallback analytics failed: {e})"
+
+    # minimal inline fallback
+    import pandas as pd
+    try:
+        df = pd.read_csv(cleaned_csv_path)
+        booking_col = next((c for c in df.columns if "book" in c.lower()), None)
+        delivered_col = next((c for c in df.columns if "deliv" in c.lower()), None)
+        loc_col = df.columns[0] if len(df.columns) > 0 else None
+        if booking_col and delivered_col and loc_col:
+            df["_book"] = pd.to_numeric(df[booking_col], errors="coerce").fillna(0)
+            df["_deliv"] = pd.to_numeric(df[delivered_col], errors="coerce").fillna(0)
+            df["_gap"] = df["_book"] - df["_deliv"]
+            top = df.groupby(loc_col)["_gap"].sum().nlargest(5)
+            return "Deterministic fallback summary:\n" + top.to_string()
+        else:
+            return "Deterministic fallback: could not auto-find booking/delivered columns."
+    except Exception as e:
+        return f"Deterministic fallback error: {e}"
+
 def interactive_loop(args):
     passages = load_passages(args.rag_dir)
     emb_matrix, embed_model = load_embeddings_if_present(args.rag_dir)
@@ -161,8 +198,21 @@ def interactive_loop(args):
                 llm_out = "NO_AUTOMATIC_LLM_RESPONSE — prompt printed; paste model answer here."
                 print(prompt)
 
-            # print and save outputs
+            # ensure variable name 'answer' exists for downstream checks (some other modules expect it)
+            answer = (llm_out or "").strip()
+
             print("\n=== LLM Answer ===\n")
+
+            # --- deterministic fallback for CLI ---
+            # Use deterministic fallback if LLM explicitly states insufficient evidence
+            if answer.lower().startswith("insufficient") or "insufficient evidence" in answer.lower():
+                print("\n[Deterministic fallback] LLM flagged insufficient evidence — showing data-driven insights instead:\n")
+                fallback_text = run_deterministic_fallback(cleaned_csv_path="data/cleaned/tankers_cleaned_enhanced.csv")
+                print(fallback_text)
+                # append fallback to the LLM output so saved report contains both
+                llm_out = llm_out + "\n\n---\n\nDeterministic fallback:\n" + fallback_text
+            # --- end fallback ---
+
             print(llm_out)
             ev_path, rpt_path, trace_path = save_outputs(evidence_meta, llm_out, q)
             print(f"\nSaved evidence -> {ev_path}\nReport -> {rpt_path}\nTrace -> {trace_path}")

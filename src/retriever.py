@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 retriever.py - simple RAG retriever with fallbacks.
 Usage:

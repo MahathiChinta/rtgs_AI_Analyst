@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 rag_builder_fallback.py
 Build a lightweight evidence store (outputs/rag):

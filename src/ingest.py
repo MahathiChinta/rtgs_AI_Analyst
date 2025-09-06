@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 ingest.py
 Merge all CSVs in input_dir and produce a single merged CSV and a small profile.

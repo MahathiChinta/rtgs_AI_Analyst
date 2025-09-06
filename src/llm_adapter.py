@@ -1,4 +1,4 @@
-# src/llm_adapter.py
+
 """
 LLM adapter (Gemini-only) for the RTGS pipeline.
 
@@ -148,7 +148,7 @@ def call_gemini(prompt: str,
         return _manual_prompt_fallback(prompt_full)
 
 
-# ✅ Backwards-compatible public function
+# Backwards-compatible public function
 def call_llm(prompt: str,
              model: Optional[str] = None,
              temperature: float = DEFAULT_TEMPERATURE,

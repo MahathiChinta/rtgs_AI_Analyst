@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 agent_pipeline.py
 Top-level orchestrator for the RTGS agentic workflow.

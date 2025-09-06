@@ -1,6 +1,15 @@
 dataset:
-  infile: data/cleaned/tankers_cleaned_enhanced.csv
-  scope_note: "Hyderabad water tanker deliveries — 6 months (example)"
+  infile: data/cleaned/merged-20250906T142333Z.csv   # default; pipeline may override
+  scope_note: "Hyderabad water tanker deliveries — demo scope (6 months)"
+  # Example mapping: map raw column name variants to canonical names used by pipeline.
+  column_mapping:
+    date: ["date", "booking_date", "requested_date", "request_date"]
+    year: ["year", "yr"]
+    month: ["month", "mon"]
+    location: ["location", "division", "ward", "locality", "area"]
+    booked: ["booked", "noofbookings", "requests", "requested"]
+    delivered: ["delivered", "supplied", "fulfilled"]
+    id: ["id", "booking_id", "request_id"]
 
 rag:
   out_dir: outputs/rag
@@ -8,7 +17,7 @@ rag:
   use_faiss: false
 
 llm:
-  provider: gemini       # openai or manual
+  provider: gemini
   model: gemini-2.5-pro
   temperature: 0.0
   max_tokens: 300
@@ -16,4 +25,4 @@ llm:
 run:
   question: "Which localities show the largest unmet tanker demand? Provide short policy recommendations."
   k: 6
-  auto_approve: false     # set true to auto-approve HITL for demo
+  auto_approve: false

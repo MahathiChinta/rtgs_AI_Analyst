@@ -21,4 +21,7 @@ outputs/rag/*
 # System
 .DS_Store
 Thumbs.db
-outputs/
+
+traces/
+logs/
+__pycache__/

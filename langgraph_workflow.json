@@ -1,0 +1,54 @@
+{
+  "name": "rtgs_langgraph_workflow",
+  "description": "LangGraph-style multi-agent workflow (declarative). Demonstrates agents and handoffs.",
+  "agents": [
+    {
+      "id": "researcher",
+      "role": "researcher",
+      "purpose": "select dataset files, infer scope and quick preview",
+      "outputs": ["files"]
+    },
+    {
+      "id": "ingest",
+      "role": "ingestor",
+      "purpose": "merge monthly files into a single raw CSV; produce schema profile",
+      "inputs": ["files"],
+      "outputs": ["merged_csv", "profile_json"]
+    },
+    {
+      "id": "clean",
+      "role": "cleaner",
+      "purpose": "infer schema, canonicalize columns, clean and transform rows",
+      "inputs": ["merged_csv", "profile_json"],
+      "outputs": ["cleaned_csv", "mapping_json", "dq_report"]
+    },
+    {
+      "id": "validate",
+      "role": "validator",
+      "purpose": "run data quality checks and flag issues; HITL approval for downstream steps",
+      "inputs": ["cleaned_csv"],
+      "outputs": ["validation_report"]
+    },
+    {
+      "id": "rag",
+      "role": "indexer",
+      "purpose": "create embeddings & RAG index (semantic lookup) from cleaned data",
+      "inputs": ["cleaned_csv"],
+      "outputs": ["embeddings", "passages"]
+    },
+    {
+      "id": "analyst",
+      "role": "analyst",
+      "purpose": "run semantic Q&A on evidence and produce human-readable policy notes",
+      "inputs": ["embeddings", "passages", "validation_report"],
+      "outputs": ["evidence", "report"]
+    }
+  ],
+  "orchestration": [
+    {"from": "researcher", "to": "ingest"},
+    {"from": "ingest", "to": "clean"},
+    {"from": "clean", "to": "validate"},
+    {"from": "validate", "to": "rag"},
+    {"from": "rag", "to": "analyst"}
+  ]
+}
