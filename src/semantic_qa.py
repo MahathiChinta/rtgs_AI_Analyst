@@ -1,5 +1,5 @@
 """
-semantic_qa.py - run evidence retrieval + LLM answer; save artifacts.
+semantic_qa.py - run evidence retrieval + LLM answer; save artifacts into outputs/final/.
 Usage:
 python src/semantic_qa.py --q "Your question" --rag_dir outputs/rag --k 6
 """
@@ -7,7 +7,6 @@ import argparse, json, textwrap
 from pathlib import Path
 from datetime import datetime
 from retriever import Retriever
-# updated adapter import (call_llm signature expects model, temperature, max_tokens)
 from llm_adapter import call_llm
 
 SYSTEM_INSTR = "You are an evidence-focused analyst. Use ONLY the provided evidence (quote E1..En). If evidence insufficient, say 'Insufficient evidence' and recommend a data collection step."
@@ -37,7 +36,7 @@ Instructions:
 def ts():
     return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
-def save_artifacts(question, hits, answer, out_dir="outputs"):
+def save_artifacts(question, hits, answer, out_dir="outputs/final"):
     outdir = Path(out_dir)
     outdir.mkdir(parents=True, exist_ok=True)
     evid_path = outdir / f"evidence-{ts()}.json"
@@ -48,19 +47,14 @@ def save_artifacts(question, hits, answer, out_dir="outputs"):
         fh.write(f"# Semantic QA Report\n\n**Question:** {question}\n\n")
         fh.write("## Top Evidence\n\n")
         for i,h in enumerate(hits, start=1):
-            # protect against missing score
             score = h.get("score")
             score_str = f"{score:.3f}" if isinstance(score, (int, float)) else str(score)
             fh.write(f"- E{i} (score={score_str}): {h.get('text')}\n")
         fh.write("\n## Answer (LLM)\n\n")
-        fh.write(answer if answer else "_No automatic LLM response — prompt printed for manual paste._")
+        fh.write(answer or "_No automatic LLM response — prompt printed for manual paste._")
     return str(evid_path), str(rep_path)
 
 def run_deterministic_fallback(cleaned_csv_path: str):
-    """
-    Try to call src.quick_analytics.deterministic_fallback_summary if present,
-    otherwise run a small inline fallback.
-    """
     try:
         from src.quick_analytics import deterministic_fallback_summary
     except Exception:
@@ -75,7 +69,6 @@ def run_deterministic_fallback(cleaned_csv_path: str):
         except Exception as e:
             return f"(fallback analytics failed: {e})"
 
-    # inline fallback
     import pandas as pd
     try:
         df = pd.read_csv(cleaned_csv_path)
@@ -111,11 +104,9 @@ def main(question, rag_dir="outputs/rag", k=6, llm_provider=None, llm_model=None
         return
     prompt = build_prompt(question, hits)
 
-    # CALL LLM: use the adapter signature that expects model, temperature, max_tokens
     try:
         answer = call_llm(prompt, model=llm_model, temperature=temp, max_tokens=300)
     except TypeError:
-        # older signatures or wrappers -- try calling without keyword names
         try:
             answer = call_llm(prompt, llm_model, temp, 300)
         except Exception as e:
@@ -125,20 +116,16 @@ def main(question, rag_dir="outputs/rag", k=6, llm_provider=None, llm_model=None
         print("LLM adapter failure:", e)
         answer = None
 
-    # Save artifacts (report will include LLM output)
     evid_path, rep_path = save_artifacts(question, hits, answer or "")
     print("Evidence saved to:", evid_path)
     print("Report saved to:", rep_path)
 
-    # If LLM answered 'insufficient evidence' (or similar), run deterministic fallback and append to report
     ans_norm = (answer or "").strip().lower()
     insufficient_triggers = ("insufficient evidence", "insufficient data", "evidence insufficient", "not enough evidence", "no evidence")
     if any(t in ans_norm for t in insufficient_triggers):
         print("\nLLM indicates insufficient evidence — running deterministic fallback analysis...\n")
-        # try to infer a cleaned CSV path from typical locations; user can adjust this path if needed
         cleaned_guess = "data/cleaned/tankers_cleaned_enhanced.csv"
         fallback_text = run_deterministic_fallback(cleaned_guess)
-        # append fallback results to existing report
         try:
             with open(rep_path, "a", encoding="utf8") as fh:
                 fh.write("\n\n---\n\n### Deterministic fallback analysis\n\n")
@@ -147,7 +134,6 @@ def main(question, rag_dir="outputs/rag", k=6, llm_provider=None, llm_model=None
         except Exception as e:
             print("Could not append deterministic fallback to report:", e)
 
-    # print LLM answer or manual prompt message
     if answer:
         print("\n=== LLM Answer ===\n")
         print(answer)

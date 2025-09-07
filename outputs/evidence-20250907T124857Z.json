@@ -1,0 +1,119 @@
+{
+  "question": "Which sections have the highest total number of bookings in the dataset? List the top 10 with counts.",
+  "evidence": [
+    {
+      "id": 352,
+      "score": 0.39357423782348633,
+      "meta": {
+        "mapped": {
+          "year": "year",
+          "month": "month",
+          "date": "date",
+          "noofbookings": "noofbookings",
+          "delivered": "delivered",
+          "section": "section",
+          "division": "division"
+        },
+        "_source_row": 352,
+        "noofbookings": 3.0,
+        "delivered": 3.0,
+        "date_iso": "2024-03-01"
+      }
+    },
+    {
+      "id": 661,
+      "score": 0.38648563623428345,
+      "meta": {
+        "mapped": {
+          "year": "year",
+          "month": "month",
+          "date": "date",
+          "noofbookings": "noofbookings",
+          "delivered": "delivered",
+          "section": "section",
+          "division": "division"
+        },
+        "_source_row": 661,
+        "noofbookings": 415.0,
+        "delivered": 415.0,
+        "date_iso": "2024-05-01"
+      }
+    },
+    {
+      "id": 1030,
+      "score": 0.38556307554244995,
+      "meta": {
+        "mapped": {
+          "year": "year",
+          "month": "month",
+          "date": "date",
+          "noofbookings": "noofbookings",
+          "delivered": "delivered",
+          "section": "section",
+          "division": "division"
+        },
+        "_source_row": 1030,
+        "noofbookings": 479.0,
+        "delivered": 479.0,
+        "date_iso": "2024-08-01"
+      }
+    },
+    {
+      "id": 183,
+      "score": 0.3826402425765991,
+      "meta": {
+        "mapped": {
+          "year": "year",
+          "month": "month",
+          "date": "date",
+          "noofbookings": "noofbookings",
+          "delivered": "delivered",
+          "section": "section",
+          "division": "division"
+        },
+        "_source_row": 183,
+        "noofbookings": 3.0,
+        "delivered": 3.0,
+        "date_iso": "2024-03-01"
+      }
+    },
+    {
+      "id": 82,
+      "score": 0.38037681579589844,
+      "meta": {
+        "mapped": {
+          "year": "year",
+          "month": "month",
+          "date": "date",
+          "noofbookings": "noofbookings",
+          "delivered": "delivered",
+          "section": "section",
+          "division": "division"
+        },
+        "_source_row": 82,
+        "noofbookings": 1.0,
+        "delivered": 1.0,
+        "date_iso": "2024-12-01"
+      }
+    },
+    {
+      "id": 148,
+      "score": 0.3802747130393982,
+      "meta": {
+        "mapped": {
+          "year": "year",
+          "month": "month",
+          "date": "date",
+          "noofbookings": "noofbookings",
+          "delivered": "delivered",
+          "section": "section",
+          "division": "division"
+        },
+        "_source_row": 148,
+        "noofbookings": 7.0,
+        "delivered": 7.0,
+        "date_iso": "2024-12-01"
+      }
+    }
+  ]
+}

@@ -1,45 +1,27 @@
 """
-src/semantic_cli.py
-
-Interactive CLI for semantic Q&A using existing RAG artifacts.
-
-Usage examples:
-  # interactive prompt (type question at prompt)
-  python src/semantic_cli.py --rag_dir outputs/rag --k 6 --model gemini-2.5-pro --temp 0.0
-
-  # one-shot question
-  python src/semantic_cli.py --rag_dir outputs/rag --k 6 --model gemini-2.5-pro --temp 0.0 --question "Which localities show the largest unmet tanker demand?"
-
-Notes:
-- Expects `passages.jsonl` in --rag_dir. If `embeddings.npy` exists, uses sentence-transformers for semantic search.
-- Falls back to token-overlap scoring if embeddings or sentence-transformers package are absent.
-- Saves evidence and report in outputs/ and a trace in traces/.
+Interactive semantic CLI for Q&A using RAG + LLM + fallback.
 """
-
 import argparse
 import json
 import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Tuple
-
-ROOT = Path(__file__).resolve().parents[1]
-OUTPUTS = ROOT / "outputs"
-TRACES = ROOT / "traces"
-
-# local adapter that your pipeline already uses
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import llm_adapter
- # uses call_llm(prompt, model, temperature, max_tokens)
 
-# optional local imports (for embeddings)
+# optional sentence-transformers usage
 try:
     from sentence_transformers import SentenceTransformer
     import numpy as np
     HAS_EMBED = True
 except Exception:
     HAS_EMBED = False
+
+ROOT = Path(__file__).resolve().parents[1]
+OUTPUTS = ROOT / "outputs"
+TRACES = ROOT / "traces"
 
 def ts() -> str:
     return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
@@ -53,7 +35,6 @@ def load_passages(rag_dir: str) -> List[Dict]:
     with open(pj, "r", encoding="utf-8") as fh:
         for line in fh:
             passages.append(json.loads(line))
-    # ensure deterministic order stable by id
     passages.sort(key=lambda x: str(x.get("id", "")))
     return passages
 
@@ -68,14 +49,11 @@ def load_embeddings_if_present(rag_dir: str):
 def score_passages_with_embedding(query: str, passages: List[Dict], emb_matrix, embed_model) -> List[Tuple[int, float]]:
     import numpy as np
     q_emb = embed_model.encode([query], convert_to_numpy=True)[0]
-    # normalize
     def norm(v): return v / (np.linalg.norm(v) + 1e-12)
     qn = norm(q_emb)
-    # compute cosine similarities
     scores = []
     for i, v in enumerate(emb_matrix):
         scores.append((i, float(np.dot(qn, norm(v)))))
-    # sort desc by score, stable by index for tie-break
     scores.sort(key=lambda x: (-x[1], x[0]))
     return scores
 
@@ -92,7 +70,8 @@ def score_passages_token_overlap(query: str, passages: List[Dict]) -> List[Tuple
     return scores
 
 def build_prompt(evidence_items: List[str], question: str) -> str:
-    header = "You are an evidence-focused analyst. Use ONLY the provided evidence (quote E1..En). If evidence insufficient, say 'Insufficient evidence' and recommend a data collection step.\n\n"
+    header = ("You are an evidence-focused analyst. Use ONLY the provided evidence (quote E1..En). "
+              "If evidence insufficient, say 'Insufficient evidence' and recommend a data collection step.\n\n")
     evidence_text = "\n".join([f"[E{idx+1}] {ev}" for idx, ev in enumerate(evidence_items)])
     instructions = (
         "\nInstructions:\n"
@@ -120,28 +99,19 @@ def save_outputs(evidence: List[Dict], report_text: str, question: str):
     return ev_path, rpt_path, trace_path
 
 def run_deterministic_fallback(cleaned_csv_path: str):
-    """
-    Try to call src.quick_analytics.deterministic_fallback_summary if present,
-    otherwise run a minimal local summary.
-    """
+    # reuse the simple fallback from semantic_qa
     try:
-        # preferred location
-        from src.quick_analytics import deterministic_fallback_summary
+        from semantic_qa import run_deterministic_fallback as fallback_fn
     except Exception:
         try:
-            from quick_analytics import deterministic_fallback_summary
+            from src.semantic_qa import run_deterministic_fallback as fallback_fn
         except Exception:
-            deterministic_fallback_summary = None
-
-    if deterministic_fallback_summary:
-        try:
-            return deterministic_fallback_summary(cleaned_csv_path=cleaned_csv_path)
-        except Exception as e:
-            return f"(fallback analytics failed: {e})"
-
+            fallback_fn = None
+    if fallback_fn:
+        return fallback_fn(cleaned_csv_path)
     # minimal inline fallback
-    import pandas as pd
     try:
+        import pandas as pd
         df = pd.read_csv(cleaned_csv_path)
         booking_col = next((c for c in df.columns if "book" in c.lower()), None)
         delivered_col = next((c for c in df.columns if "deliv" in c.lower()), None)
@@ -165,7 +135,6 @@ def interactive_loop(args):
     while True:
         try:
             q = args.question or input("\nQuestion> ").strip()
-            # if question given as arg then run once and exit
             if not q:
                 continue
             if q.lower() in ("quit", "exit"):
@@ -187,7 +156,6 @@ def interactive_loop(args):
                 evidence_meta.append({"id": p.get("id"), "score": score, "meta": p.get("meta", {})})
 
             prompt = build_prompt(evidence_items, q)
-            # call LLM via your llm_adapter (Gemini-only adapter)
             model = args.model
             temp = float(args.temp)
             print("\n=== Sending prompt to LLM (this may be slow) ===\n")
@@ -198,26 +166,19 @@ def interactive_loop(args):
                 llm_out = "NO_AUTOMATIC_LLM_RESPONSE — prompt printed; paste model answer here."
                 print(prompt)
 
-            # ensure variable name 'answer' exists for downstream checks (some other modules expect it)
             answer = (llm_out or "").strip()
-
             print("\n=== LLM Answer ===\n")
 
-            # --- deterministic fallback for CLI ---
-            # Use deterministic fallback if LLM explicitly states insufficient evidence
             if answer.lower().startswith("insufficient") or "insufficient evidence" in answer.lower():
                 print("\n[Deterministic fallback] LLM flagged insufficient evidence — showing data-driven insights instead:\n")
                 fallback_text = run_deterministic_fallback(cleaned_csv_path="data/cleaned/tankers_cleaned_enhanced.csv")
                 print(fallback_text)
-                # append fallback to the LLM output so saved report contains both
                 llm_out = llm_out + "\n\n---\n\nDeterministic fallback:\n" + fallback_text
-            # --- end fallback ---
 
             print(llm_out)
             ev_path, rpt_path, trace_path = save_outputs(evidence_meta, llm_out, q)
             print(f"\nSaved evidence -> {ev_path}\nReport -> {rpt_path}\nTrace -> {trace_path}")
 
-            # if question provided via CLI arg, run one-shot and exit
             if args.question:
                 break
 
@@ -227,12 +188,12 @@ def interactive_loop(args):
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--rag_dir", default=str(OUTPUTS / "rag"), help="RAG directory containing passages.jsonl and optional embeddings.npy")
-    p.add_argument("--k", default=6, type=int, help="Number of evidence passages to retrieve")
-    p.add_argument("--model", default=os.getenv("GEMINI_MODEL", "gemini-2.5-pro"), help="LLM model to use (Gemini)")
-    p.add_argument("--temp", default=os.getenv("DEFAULT_TEMPERATURE", "0.0"), help="Sampling temperature")
-    p.add_argument("--max_tokens", default=512, help="Max tokens for LLM output")
-    p.add_argument("--question", default=None, help="If provided, the CLI will run one-shot and exit")
+    p.add_argument("--rag_dir", default=str(OUTPUTS / "rag"))
+    p.add_argument("--k", default=6, type=int)
+    p.add_argument("--model", default=os.getenv("GEMINI_MODEL", "gemini-2.5-pro"))
+    p.add_argument("--temp", default=os.getenv("DEFAULT_TEMPERATURE", "0.0"))
+    p.add_argument("--max_tokens", default=512)
+    p.add_argument("--question", default=None)
     return p.parse_args()
 
 if __name__ == "__main__":

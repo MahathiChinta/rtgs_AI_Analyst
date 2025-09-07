@@ -1,0 +1,17 @@
+{
+  "ts": "20250907T124106Z",
+  "mapping_profile": {
+    "date": [
+      "year",
+      "month"
+    ],
+    "noofbookings": "noofbookings",
+    "delivered": "delivered"
+  },
+  "counts": {
+    "rows": 1078,
+    "date_nonnull": 1078,
+    "bookings_nonnull": 1078,
+    "delivered_nonnull": 1078
+  }
+}

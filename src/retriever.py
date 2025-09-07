@@ -1,4 +1,3 @@
-
 """
 retriever.py - simple RAG retriever with fallbacks.
 Usage:
@@ -7,7 +6,7 @@ r = Retriever(rag_dir="outputs/rag", model_name="all-MiniLM-L6-v2", use_faiss=Fa
 hits = r.query("Which localities show largest unmet demand?", k=6)
 Each hit is {"id":..., "text":..., "score":..., "meta": {...}}
 """
-import json, os, numpy as np
+import json, os, numpy as np, re
 from pathlib import Path
 from typing import List
 from math import sqrt
@@ -26,7 +25,10 @@ class Retriever:
         if p.exists():
             with open(p, "r", encoding="utf8") as fh:
                 for line in fh:
-                    self.passages.append(json.loads(line))
+                    try:
+                        self.passages.append(json.loads(line))
+                    except Exception:
+                        continue
         # try embeddings.npy
         embp = self.rag_dir / "embeddings.npy"
         if embp.exists():
@@ -40,10 +42,8 @@ class Retriever:
                 self.embeddings = np.load(tfidf_p)
             except Exception:
                 self.embeddings = None
-        # if nothing else, passages list is available
 
     def _cosine(self, a, b):
-        # a and b are 1D numpy arrays
         an = np.linalg.norm(a)
         bn = np.linalg.norm(b)
         if an == 0 or bn == 0:
@@ -51,14 +51,12 @@ class Retriever:
         return float(np.dot(a, b) / (an * bn))
 
     def _embed_query(self, text: str):
-        # Try to embed with sentence-transformers if available and embeddings exist
         try:
             from sentence_transformers import SentenceTransformer
             model = SentenceTransformer(self.model_name)
             vec = model.encode([text], show_progress_bar=False)[0]
             return vec
         except Exception:
-            # Try TF-IDF vectorizer
             try:
                 import pickle
                 vec_path = self.rag_dir / "vectorizer.pkl"
@@ -71,11 +69,9 @@ class Retriever:
         return None
 
     def query(self, question: str, k: int = 6) -> List[dict]:
-        # If we have embeddings, embed query and compute cosine with stored matrix
         if self.embeddings is not None:
             qv = self._embed_query(question)
             if qv is None:
-                # fallback to simple scoring by string overlap
                 return self._substring_rank(question, k)
             scores = []
             for i, vec in enumerate(self.embeddings):
@@ -90,15 +86,17 @@ class Retriever:
         else:
             return self._substring_rank(question, k)
 
+    def _tokenize(self, text: str):
+        # simple word tokens (alphanumeric)
+        return re.findall(r"\w+", text.lower())
+
     def _substring_rank(self, question, k):
-        q = question.lower()
+        qtokens = set(self._tokenize(question))
         scored = []
         for i, p in enumerate(self.passages):
-            text = p.get("text","").lower()
-            # score by count of shared tokens
-            qtok = set(q.split())
-            ttok = set(text.split())
-            overlap = len(qtok.intersection(ttok))
+            text = p.get("text","")
+            ttokens = set(self._tokenize(text))
+            overlap = len(qtokens.intersection(ttokens))
             scored.append((i, overlap))
         scored.sort(key=lambda x: x[1], reverse=True)
         hits = []

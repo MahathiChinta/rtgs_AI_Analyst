@@ -1,0 +1,56 @@
+{
+  "mapping": {
+    "date": [
+      "year",
+      "month"
+    ],
+    "noofbookings": "noofbookings",
+    "delivered": "delivered"
+  },
+  "diag": {
+    "found_cols": [
+      "year",
+      "month",
+      "division",
+      "section",
+      "noofbookings",
+      "delivered",
+      "_source_file"
+    ],
+    "mapped": {
+      "noofbookings": "noofbookings",
+      "delivered": "delivered",
+      "date_from_year_month": [
+        "year",
+        "month"
+      ]
+    },
+    "warnings": [],
+    "sample_vals": {
+      "year": "2024",
+      "month": "12",
+      "division": "1",
+      "section": "BAHADURPURA",
+      "noofbookings": "8",
+      "delivered": "8",
+      "_source_file": "tankers_reports_2024_12.csv"
+    },
+    "counts": {
+      "rows": 1078,
+      "date_nonnull": 1078,
+      "bookings_nonnull": 1078,
+      "delivered_nonnull": 1078
+    }
+  },
+  "sample_row": {
+    "year": "2024",
+    "month": "12",
+    "division": "1",
+    "section": "BAHADURPURA",
+    "noofbookings": "8",
+    "delivered": "8",
+    "_source_file": "tankers_reports_2024_12.csv",
+    "date": "2024-12-01",
+    "month_iso": "2024-12"
+  }
+}

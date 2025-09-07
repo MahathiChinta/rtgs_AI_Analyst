@@ -1,0 +1,10 @@
+{
+  "ts": "20250907T124106Z",
+  "counts": {
+    "rows": 1078,
+    "date_nonnull": 1078,
+    "bookings_nonnull": 1078,
+    "delivered_nonnull": 1078
+  },
+  "warnings": []
+}

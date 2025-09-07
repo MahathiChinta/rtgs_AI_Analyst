@@ -1,0 +1,12 @@
+{
+  "count": 1078,
+  "mapped_columns": {
+    "year": "year",
+    "month": "month",
+    "date": "date",
+    "noofbookings": "noofbookings",
+    "delivered": "delivered",
+    "section": "section",
+    "division": "division"
+  }
+}
