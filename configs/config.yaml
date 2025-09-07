@@ -26,3 +26,12 @@ run:
   question: "Which localities show the largest unmet tanker demand? Provide short policy recommendations."
   k: 6
   auto_approve: false
+
+analytics:
+  enabled: true
+  in: "data/cleaned/tankers_cleaned_enhanced.csv"   # input file produced by the pipeline
+  groupby: "section"                               # column to group by
+  metric: "noofbookings"                           # numeric metric to aggregate
+  top_k: 10                                        # top-k groups to return
+  out_dir: "outputs/plots"                         # where quick_analytics writes CSV + PNG
+

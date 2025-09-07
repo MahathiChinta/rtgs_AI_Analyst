@@ -1,183 +1,303 @@
-
+#!/usr/bin/env python3
 """
-clean_enhanced.py - enhanced cleaner with mapping verification (HITL) and --auto-approve.
+clean_enhanced.py
 
-Use:
-  python src/clean_enhanced.py --in data/cleaned/tankers_raw_merged.csv --out data/cleaned/tankers_cleaned_enhanced.csv
-  python src/clean_enhanced.py --in ... --out ... --auto-approve
+Enhanced cleaning + mapping verification (HITL) for the RTGS pipeline.
 
-If --auto-approve is set the script will call the LLM to validate mapping and
-auto-apply (accept) the LLM's 'ok' decision (no human prompt). If LLM output cannot
-be parsed, it will still continue when --auto-approve is True, otherwise it will prompt.
+Features:
+- Loads CSV -> canonicalize column names
+- Auto-detects bookings/delivered/date/year/month columns from heuristics
+- Fills canonical columns: date, year, month, noofbookings, delivered
+- Writes mapping profile, cleaned CSV, and a DQ report
+- Calls llm_adapter.call_llm(...) to verify inferred mapping (HITL). Use --auto-approve
+  to accept LLM suggestions automatically (helpful for demo runs).
+Usage:
+  python src/clean_enhanced.py --in data/cleaned/tankers_raw_merged.csv --out data/cleaned/tankers_cleaned_enhanced.csv [--auto-approve]
 """
-import argparse, os, platform, subprocess, json
-from datetime import datetime
+import argparse
+import json
+import re
 from pathlib import Path
-from dotenv import load_dotenv
+from datetime import datetime
+from typing import Tuple, Dict, Any
+
 import pandas as pd
 
-load_dotenv()
+# local llm adapter (Gemini-only adapter in this repo)
+try:
+    from src import llm_adapter as llm_adapter_pkg  # when executed as module
+except Exception:
+    import llm_adapter as llm_adapter_pkg        # when executed directly
+
 TS = lambda: datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
-# Import llm_adapter.call_llm (works when src package or running from repo root)
-try:
-    from src.llm_adapter import call_llm
-except Exception:
-    try:
-        from llm_adapter import call_llm
-    except Exception:
-        def call_llm(prompt, model=None, temperature=0.0, max_tokens=1024):
-            print("LLM adapter not available — printing manual prompt:")
-            print(prompt)
-            print("Paste the LLM answer now (end with empty line):")
-            lines = []
-            while True:
-                l = input()
-                if not l.strip():
-                    break
-                lines.append(l)
-            return "\n".join(lines)
 
-def ensure_dirs():
-    Path("data/cleaned").mkdir(parents=True, exist_ok=True)
-    Path("outputs/profiles").mkdir(parents=True, exist_ok=True)
-    Path("outputs").mkdir(parents=True, exist_ok=True)
+def infer_and_fix_dates_and_counts(df: pd.DataFrame, filename_hint_col: str = "_source_file") -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Infer canonical columns:
+      - date (pd.Timestamp), year (int), month (int), month_iso (YYYY-MM)
+      - noofbookings (numeric), delivered (numeric)
+    Returns (df_fixed, diagnostics)
+    """
+    diag = {"found_cols": list(df.columns), "mapped": {}, "warnings": [], "sample_vals": {}}
 
-def canonize(name: str) -> str:
-    if not isinstance(name, str):
-        name = str(name)
-    nm = name.strip().lower().replace(" ", "_").replace("-", "_").replace(".", "")
-    nm = "".join(ch for ch in nm if ch.isalnum() or ch == "_")
-    nm = "_".join([p for p in nm.split("_") if p])
-    return nm or name
-
-def infer_and_map_columns(df: pd.DataFrame):
-    return {col: canonize(col) for col in df.columns}
-
-def clean_dataframe(df: pd.DataFrame, mapping):
-    df = df.rename(columns=mapping).copy()
-    for c in df.select_dtypes(include=["object"]).columns:
-        df[c] = df[c].astype(str).str.strip().replace({"": pd.NA})
+    # sample values (first non-null)
     for c in df.columns:
-        if any(k in c for k in ("noof", "no_", "no", "count", "delivered", "booked", "total")):
-            df[c] = pd.to_numeric(df[c], errors="coerce").astype("Int64")
-    return df
+        nonnull = df[c].dropna()
+        diag["sample_vals"][c] = str(nonnull.iloc[0]) if len(nonnull) > 0 else None
 
-def write_json(obj, path):
+    # normalized mapping from lower -> original name
+    col_lower_map = {c.lower(): c for c in df.columns}
+
+    def choose_col_by_patterns(patterns):
+        for p in patterns:
+            for k_lower, orig in col_lower_map.items():
+                if p in k_lower:
+                    return orig
+        return None
+
+    # bookings
+    bookings_candidates = ['noofbookings', 'bookings', 'no_of_bookings', 'number_of_bookings',
+                           'booked', 'booked_count', 'requests', 'no_of_requests']
+    bookings_col = choose_col_by_patterns(bookings_candidates)
+    if bookings_col:
+        diag['mapped']['noofbookings'] = bookings_col
+        df[bookings_col] = pd.to_numeric(df[bookings_col], errors='coerce')
+        # create canonical column
+        df['noofbookings'] = df.get('noofbookings', df[bookings_col])
+    else:
+        diag['warnings'].append("No obvious bookings column found by name.")
+
+    # delivered
+    delivered_candidates = ['delivered', 'delivered_count', 'supplied', 'fulfilled', 'delv', 'delivered_no']
+    delivered_col = choose_col_by_patterns(delivered_candidates)
+    if delivered_col:
+        diag['mapped']['delivered'] = delivered_col
+        df[delivered_col] = pd.to_numeric(df[delivered_col], errors='coerce')
+        df['delivered'] = df.get('delivered', df[delivered_col])
+    else:
+        diag['warnings'].append("No obvious delivered column found by name.")
+
+    # date detection (explicit date column)
+    date_col = choose_col_by_patterns(['date', 'booking_date', 'req_date', 'request_date', 'dt'])
+    if date_col:
+        try:
+            df['date'] = pd.to_datetime(df[date_col], errors='coerce')
+            diag['mapped']['date_from'] = date_col
+        except Exception:
+            df['date'] = pd.to_datetime(df[date_col].astype(str), errors='coerce')
+            diag['mapped']['date_from'] = date_col
+
+    # year + month columns
+    year_col = choose_col_by_patterns(['year'])
+    month_col = choose_col_by_patterns(['month', 'mon'])
+    if year_col and month_col:
+        df[year_col] = pd.to_numeric(df[year_col], errors='coerce')
+        df[month_col] = pd.to_numeric(df[month_col], errors='coerce')
+        mask = df[year_col].notna() & df[month_col].notna()
+        if mask.any():
+            df.loc[mask, 'date'] = pd.to_datetime(
+                df.loc[mask, year_col].astype(int).astype(str) + "-" +
+                df.loc[mask, month_col].astype(int).astype(str).str.zfill(2) + "-01",
+                errors='coerce'
+            )
+            diag['mapped']['date_from_year_month'] = (year_col, month_col)
+
+    # fallback: parse filename hints like tankers_reports_2024_3.csv from _source_file
+    if ('date' not in df.columns) or df['date'].isna().all():
+        if filename_hint_col in df.columns:
+            def extract_ym_from_name(s):
+                if not isinstance(s, str):
+                    return (None, None)
+                # patterns like 2024_03, 2024-03, 202403, _2024_3
+                m = re.search(r'(?P<y>20\d{2})[._-]?(?P<m>0?[1-9]|1[0-2])', s)
+                if m:
+                    return int(m.group('y')), int(m.group('m'))
+                return (None, None)
+
+            ym = df[filename_hint_col].apply(lambda s: extract_ym_from_name(s))
+            df['__src_year'] = ym.apply(lambda t: t[0])
+            df['__src_month'] = ym.apply(lambda t: t[1])
+            mask2 = df['__src_year'].notna() & df['__src_month'].notna()
+            if mask2.any():
+                df.loc[mask2, 'date'] = pd.to_datetime(
+                    df.loc[mask2, '__src_year'].astype(int).astype(str) + "-" +
+                    df.loc[mask2, '__src_month'].astype(int).astype(str).str.zfill(2) + "-01",
+                    errors='coerce'
+                )
+                diag['mapped']['date_from_source_file'] = True
+
+    # final helpers
+    if 'date' in df.columns:
+        try:
+            df['month_iso'] = df['date'].dt.strftime('%Y-%m')
+            df['year_month'] = df['date'].dt.to_period('M').astype(str)
+            if 'year' not in df.columns or df['year'].isna().all():
+                df['year'] = df['date'].dt.year
+            if 'month' not in df.columns or df['month'].isna().all():
+                df['month'] = df['date'].dt.month
+        except Exception:
+            diag['warnings'].append("date present but dt conversion failed for helpers")
+
+    # ensure numeric types
+    for c in ['noofbookings', 'delivered', 'year', 'month']:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors='coerce')
+
+    # remove temp helpers
+    for c in ['__src_year', '__src_month']:
+        if c in df.columns:
+            df.drop(columns=[c], inplace=True)
+
+    diag['counts'] = {
+        'rows': len(df),
+        'date_nonnull': int(df['date'].notna().sum()) if 'date' in df.columns else 0,
+        'month_nonnull': int(df['month'].notna().sum()) if 'month' in df.columns else 0,
+        'bookings_nonnull': int(df['noofbookings'].notna().sum()) if 'noofbookings' in df.columns else 0,
+        'delivered_nonnull': int(df['delivered'].notna().sum()) if 'delivered' in df.columns else 0,
+    }
+
+    return df, diag
+
+
+def write_json(obj, path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(obj, fh, indent=2, ensure_ascii=False)
 
-def read_csv_preview(path, n=3):
-    df = pd.read_csv(path, nrows=n, dtype=str)
-    return df.fillna("").to_dict(orient="records")
 
-def build_mapping_prompt(mapping, sample_rows, context_note=""):
-    lines = []
-    lines.append("Mapping verification task:")
-    lines.append("RAW_COLUMN -> CANONICAL_NAME")
-    for r, t in mapping.items():
-        lines.append(f"- {r} -> {t}")
-    if context_note:
-        lines.append("")
-        lines.append("Context: " + context_note)
+def call_mapping_verification_llm(mapping: Dict[str, Any], sample: Dict[str, Any], auto_approve: bool = False) -> Tuple[bool, Dict]:
+    """
+    Ask LLM to verify suggested mapping. Returns (approved_bool, llm_result).
+    llm_result: {"ok": bool, "suggestions": [ ... ] }
+    """
+    # Build prompt
+    lines = [
+        "You are a schema-mapping assistant. We have raw CSV columns and a suggested canonical mapping.",
+        "Reply in strict JSON: {\"ok\": bool, \"suggestions\": [{\"raw\": <raw_col>, \"suggested\": <canonical>, \"reason\": <string>}, ...]}",
+        "",
+        "Raw columns (name -> sample value):"
+    ]
+    for k, v in sample.items():
+        lines.append(f"- {k}: {v}")
     lines.append("")
-    lines.append("Sample rows (first few):")
-    for i, row in enumerate(sample_rows):
-        lines.append(f"Row {i+1}: " + ", ".join([f"{k}={v}" for k, v in row.items()]))
+    lines.append("Suggested canonical mapping:")
+    for k, v in mapping.items():
+        lines.append(f"- canonical '{k}' <- raw '{v}'")
     lines.append("")
-    lines.append("Return a JSON object: { 'ok': true/false, 'suggestions': [{ 'raw':..., 'suggested':..., 'reason':... }, ...] }")
-    lines.append("Be concise and avoid hallucination.")
-    return "\n".join(lines)
+    lines.append("If mapping looks correct, set ok=true and suggestions=[]. If some raw columns should map to *different* canonical names, list them in suggestions with reasons.")
+    prompt = "\n".join(lines)
 
-def parse_llm_json_safe(text):
-    # Naive extraction of first JSON object substring
     try:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            return json.loads(text[start:end+1])
+        llm_out = llm_adapter_pkg.call_llm(prompt=prompt, model=None, temperature=0.0, max_tokens=512)
+    except Exception as e:
+        # if llm call fails, return not approved and raw text
+        return False, {"ok": False, "error": str(e), "raw_text": str(e)}
+
+    # Try to parse JSON out of llm_out
+    parsed = None
+    try:
+        parsed = json.loads(llm_out.strip())
     except Exception:
-        return None
-    return None
-
-def open_in_editor(path):
-    editor = os.environ.get("EDITOR")
-    if editor:
-        subprocess.run([editor, path])
-        return
-    if platform.system().lower().startswith("win"):
-        subprocess.run(["notepad.exe", path])
-    else:
-        try:
-            subprocess.run(["xdg-open", path])
-        except Exception:
-            print("Please edit the file manually:", path)
-
-def verify_mapping(mapping_path, sample_csv, context_note="", auto_approve=False):
-    with open(mapping_path, "r", encoding="utf-8") as fh:
-        mapping = json.load(fh)
-    sample_rows = read_csv_preview(sample_csv, n=3)
-    prompt = build_mapping_prompt(mapping, sample_rows, context_note)
-    print("[verify_mapping] calling LLM...")
-    llm_resp = call_llm(prompt, model=None, temperature=0.0, max_tokens=500)
-    parsed = parse_llm_json_safe(llm_resp)
-    print("=== LLM OUTPUT ===")
-    if parsed:
-        print(json.dumps(parsed, indent=2, ensure_ascii=False))
-    else:
-        print(llm_resp)
-        print("=== (non-JSON LLM output) ===")
-    if auto_approve:
-        print("[verify_mapping] auto-approve enabled. proceeding (LLM output used for info only).")
-        return True
-    # human loop
-    while True:
-        print("Approve mapping? [y=accept, e=edit mapping file, n=abort]")
-        c = input("> ").strip().lower()
-        if c == "y":
-            return True
-        if c == "n":
-            return False
-        if c == "e":
-            open_in_editor(mapping_path)
-            # after edit, re-run verification recursively
+        # LLM might return code block or text; try to extract JSON snippet
+        m = re.search(r'(\{.*\})', llm_out, re.DOTALL)
+        if m:
             try:
-                with open(mapping_path, "r", encoding="utf-8") as fh:
-                    json.load(fh)
-                return verify_mapping(mapping_path, sample_csv, context_note, auto_approve)
-            except Exception as e:
-                print("Edited mapping JSON invalid:", e)
-                print("Fix JSON and choose 'e' again, or 'n' to abort.")
+                parsed = json.loads(m.group(1))
+            except Exception:
+                parsed = {"ok": False, "raw_text": llm_out}
+        else:
+            parsed = {"ok": False, "raw_text": llm_out}
 
-def main(infile, out_csv, note="", auto_approve=False):
-    ensure_dirs()
-    ts = TS()
+    if auto_approve:
+        # For demo runs allow auto-approve but still return parsed result
+        return True, parsed
+
+    # return parsed approval status
+    return bool(parsed.get("ok")), parsed
+
+
+def main(infile: str, out: str, auto_approve: bool = False):
+    pin = Path(infile)
+    pout = Path(out)
+    if not pin.exists():
+        raise SystemExit(f"Input file not found: {pin}")
+
     print("[clean_enhanced] loading", infile)
-    df = pd.read_csv(infile, dtype=str)
-    mapping = infer_and_map_columns(df)
-    mapping_path = f"outputs/profiles/mapping-{ts}.json"
-    write_json(mapping, mapping_path)
-    print("Wrote mapping to", mapping_path)
-    cleaned = clean_dataframe(df, mapping)
-    cleaned.to_csv(out_csv, index=False)
-    print(f"Wrote cleaned CSV to {out_csv} ({len(cleaned)} rows)")
-    dq = {"ts": ts, "rows": len(cleaned), "columns": list(cleaned.columns)[:50], "notes": "Basic cleaning complete."}
-    dq_path = f"outputs/dq_report-{ts}.json"
+    df = pd.read_csv(pin)
+
+    df_fixed, diag = infer_and_fix_dates_and_counts(df)
+
+    # prepare mapping profile for audit
+    mapping = {
+        "date": diag.get("mapped", {}).get("date_from") or diag.get("mapped", {}).get("date_from_year_month") or ("_source_file" if diag.get("mapped", {}).get("date_from_source_file") else None),
+        "noofbookings": diag.get("mapped", {}).get("noofbookings") or None,
+        "delivered": diag.get("mapped", {}).get("delivered") or None
+    }
+
+    # sample row values for LLM prompt
+    sample_row = {}
+    for c in df_fixed.columns:
+        val = df_fixed[c].dropna().astype(str).head(1)
+        sample_row[c] = val.iloc[0] if len(val) > 0 else None
+
+    # Call LLM for mapping verification (HITL)
+    print("Wrote mapping to outputs/profiles/mapping-{}.json".format(TS()))
+    mapping_profile_path = Path("outputs/profiles") / f"mapping-{TS()}.json"
+    write_json({"mapping": mapping, "diag": diag}, mapping_profile_path)
+
+    print("[clean_enhanced] running mapping verification (HITL)...")
+    approved, llm_result = call_mapping_verification_llm(mapping=mapping, sample=sample_row, auto_approve=auto_approve)
+
+    # If not approved and not auto-approved, ask user
+    if not approved and not auto_approve:
+        print("=== LLM OUTPUT ===")
+        print(json.dumps(llm_result, indent=2, ensure_ascii=False))
+        ans = input("Approve mapping? [y=accept, e=edit mapping file, n=abort]\n> ").strip().lower()
+        if ans == "e":
+            print("Opening mapping file for editing:", mapping_profile_path)
+            print("Edit the file then re-run the script.")
+            raise SystemExit("Mapping edit requested. Re-run after editing.")
+        if ans != "y":
+            raise SystemExit("Mapping not approved. Aborting.")
+
+    print("[clean_enhanced] mapping approved. Done.")
+
+    # final cleanup and outputs
+    pout.parent.mkdir(parents=True, exist_ok=True)
+    df_fixed.to_csv(pout, index=False)
+    print(f"Wrote cleaned CSV to {pout} ({len(df_fixed)} rows)")
+
+    # write simple DQ report
+    dq = {
+        "ts": TS(),
+        "rows": len(df_fixed),
+        "counts": diag.get("counts", {}),
+        "warnings": diag.get("warnings", []),
+        "mapped": diag.get("mapped", {})
+    }
+    dq_path = Path("outputs") / f"dq_report-{TS()}.json"
     write_json(dq, dq_path)
     print("Wrote DQ report to", dq_path)
-    print("[clean_enhanced] running mapping verification (HITL)...")
-    ok = verify_mapping(mapping_path, infile, context_note=note, auto_approve=auto_approve)
-    if not ok:
-        raise SystemExit("Mapping not approved. Aborting.")
-    print("[clean_enhanced] mapping approved. Done.")
-    return 0
+
+    # also write a short human-readable profile
+    profile = {
+        "ts": TS(),
+        "mapping_profile": mapping,
+        "counts": diag.get("counts", {}),
+        "notes": diag.get("warnings", [])
+    }
+    prof_path = Path("outputs/profiles") / f"profile-{TS()}.json"
+    write_json(profile, prof_path)
+    print("Wrote profile to", prof_path)
+
+    return pout, dq_path, prof_path
+
 
 if __name__ == "__main__":
-    import argparse
     p = argparse.ArgumentParser()
     p.add_argument("--in", dest="infile", required=True)
-    p.add_argument("--out", dest="outcsv", required=True)
-    p.add_argument("--note", dest="note", default="")
-    p.add_argument("--auto-approve", dest="auto_approve", action="store_true", help="Auto-approve mapping (no HITL prompt).")
+    p.add_argument("--out", dest="out", required=True)
+    p.add_argument("--auto-approve", action="store_true", help="Auto-approve LLM mapping suggestions (useful for demo runs)")
     args = p.parse_args()
-    main(args.infile, args.outcsv, note=args.note, auto_approve=args.auto_approve)
+    main(args.infile, args.out, auto_approve=args.auto_approve)
