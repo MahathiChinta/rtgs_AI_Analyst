@@ -12,8 +12,7 @@ data/raw/*
 data/cleaned/*
 
 # Outputs (keep small artifacts, but not big binary)
-outputs/rag/*
-!outputs/rag/README.md
+
 
 # VSCode
 .vscode/
