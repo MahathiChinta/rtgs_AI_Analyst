@@ -1,41 +1,60 @@
 
-import pandas as pd
-from pathlib import Path
-import sys
+"""
+quick_analytics.py
+Simple numeric summary + plot for cleaned CSVs (fast, zero-config).
 
-def main(csv_path="data/cleaned/tankers_cleaned_enhanced.csv"):
-    p = Path(csv_path)
-    if not p.exists():
-        print(f"CSV not found: {csv_path}")
-        sys.exit(1)
-    df = pd.read_csv(p)
-    # make sure 'year' and 'month' and 'noofbookings' exist
-    for c in ("year","month","noofbookings"):
-        if c not in df.columns:
-            print(f"Missing expected column: {c}")
-            print("Columns available:", df.columns.tolist())
-            sys.exit(1)
-    # convert to numeric
-    df["noofbookings"] = pd.to_numeric(df["noofbookings"], errors="coerce").fillna(0).astype(int)
-    # group and sort
-    agg = df.groupby(["year","month"], as_index=False)["noofbookings"].sum()
-    agg = agg.sort_values(["year","month"])
-    # Print simple ASCII table and highlight top
-    print("\nMonthly booking totals (from cleaned CSV):\n")
-    print(agg.to_string(index=False))
-    top = agg.sort_values("noofbookings", ascending=False).head(5)
-    print("\nTop months by bookings (top 5):")
-    print(top.to_string(index=False))
-    # Simple implication text:
-    if len(agg) == 0:
-        print("\nNo data to compute.")
-    else:
-        max_row = agg.loc[agg["noofbookings"].idxmax()]
-        print(f"\nImplication: The month with highest observed bookings is {int(max_row['month'])}/{int(max_row['year'])} with {int(max_row['noofbookings'])} bookings. Policymakers should consider redistributing tanker capacity into that period or increasing standby resources for that month (if representative).")
+Usage:
+python src/quick_analytics.py --in data/cleaned/tankers_cleaned_enhanced.csv --groupby section --metric delivered --top 10
+
+This script:
+ - prints top N groups by metric sum
+ - saves outputs/plots/<metric>_by_<groupby>.png
+ - saves outputs/summary-<metric>-by-<groupby>.csv
+"""
+import argparse, os
+from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def main(infile, groupby, metric, top, out_dir):
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    df = pd.read_csv(infile)
+    print("Loaded:", infile)
+    print("Columns:", list(df.columns))
+    # try to find metric if not provided
+    if metric is None:
+        numerics = df.select_dtypes(include=['number']).columns.tolist()
+        if not numerics:
+            raise SystemExit("No numeric columns found. Provide --metric explicitly.")
+        metric = numerics[0]
+        print("Auto-selected metric:", metric)
+    if groupby not in df.columns:
+        raise SystemExit(f"Group-by column '{groupby}' not found in CSV.")
+    df[metric] = pd.to_numeric(df[metric], errors='coerce').fillna(0)
+    summary = df.groupby(groupby)[metric].sum().sort_values(ascending=False)
+    top_k = summary.head(top)
+    print("\nTop", top, "groups by", metric)
+    print(top_k.to_string())
+    csv_out = out_dir / f"summary-{metric}-by-{groupby}.csv"
+    top_k.reset_index().rename(columns={metric: f"{metric}_sum"}).to_csv(csv_out, index=False)
+    print("Wrote summary CSV:", csv_out)
+    png_out = out_dir / f"{metric}_by_{groupby}.png"
+    plt.figure(figsize=(8, max(3, 0.4*len(top_k))))
+    top_k.sort_values().plot.barh()
+    plt.title(f"Top {top} {groupby} by {metric}")
+    plt.xlabel(metric)
+    plt.tight_layout()
+    plt.savefig(png_out)
+    plt.close()
+    print("Wrote plot:", png_out)
 
 if __name__ == "__main__":
-    import argparse
     p = argparse.ArgumentParser()
-    p.add_argument("--csv", default="data/cleaned/tankers_cleaned_enhanced.csv")
+    p.add_argument("--in", dest="infile", required=True)
+    p.add_argument("--groupby", default="section", help="Grouping column name (e.g., section/division)")
+    p.add_argument("--metric", default=None, help="Numeric metric column (e.g., delivered, booked, consumption_kwh)")
+    p.add_argument("--top", type=int, default=10)
+    p.add_argument("--out_dir", default="outputs/plots")
     args = p.parse_args()
-    main(args.csv)
+    main(args.infile, args.groupby, args.metric, args.top, args.out_dir)

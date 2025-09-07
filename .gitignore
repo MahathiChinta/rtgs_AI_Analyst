@@ -25,3 +25,14 @@ Thumbs.db
 traces/
 logs/
 __pycache__/
+# Generated outputs & caches (auto-added)
+outputs/
+traces/
+data/cleaned/*.csv
+data/cleaned/*.npy
+__pycache__/
+*.pyc
+.env
+.env.local
+.vscode/
+archive_outputs/

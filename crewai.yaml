@@ -1,0 +1,19 @@
+crew:
+  name: rtgs-water-tanker-crew
+  description: "Crew that ingests, cleans, analyzes and builds RAG for water tanker data"
+  members:
+    - name: ingestor
+      role: extractor
+      run: "python src/ingest.py --input_dir data/raw --out data/cleaned/tankers_raw_merged.csv"
+    - name: cleaner
+      role: transformer
+      run: "python src/clean.py --in data/cleaned/tankers_raw_merged.csv --out data/cleaned/tankers_cleaned.csv"
+    - name: analyst
+      role: analyst
+      run: "python src/analytics.py --in data/cleaned/tankers_cleaned.csv --out_dir outputs"
+    - name: rag_builder
+      role: retriever_builder
+      run: "python src/rag_builder.py --in data/cleaned/tankers_cleaned.csv --out_dir outputs/rag"
+    - name: orchestrator
+      role: orchestrator
+      run: "python src/agent.py --hitl --max-retries 1"

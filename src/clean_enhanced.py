@@ -33,130 +33,120 @@ TS = lambda: datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
 
 def infer_and_fix_dates_and_counts(df: pd.DataFrame, filename_hint_col: str = "_source_file") -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """
-    Infer canonical columns:
-      - date (pd.Timestamp), year (int), month (int), month_iso (YYYY-MM)
-      - noofbookings (numeric), delivered (numeric)
-    Returns (df_fixed, diagnostics)
-    """
+    import calendar
     diag = {"found_cols": list(df.columns), "mapped": {}, "warnings": [], "sample_vals": {}}
-
-    # sample values (first non-null)
     for c in df.columns:
         nonnull = df[c].dropna()
         diag["sample_vals"][c] = str(nonnull.iloc[0]) if len(nonnull) > 0 else None
 
-    # normalized mapping from lower -> original name
-    col_lower_map = {c.lower(): c for c in df.columns}
+    col_lower_map = {c.lower().strip(): c for c in df.columns}
 
-    def choose_col_by_patterns(patterns):
+    def pick(*patterns):
+        # pick first column whose lowered name contains any of the patterns
         for p in patterns:
-            for k_lower, orig in col_lower_map.items():
-                if p in k_lower:
+            for kl, orig in col_lower_map.items():
+                if p in kl:
                     return orig
         return None
 
-    # bookings
-    bookings_candidates = ['noofbookings', 'bookings', 'no_of_bookings', 'number_of_bookings',
-                           'booked', 'booked_count', 'requests', 'no_of_requests']
-    bookings_col = choose_col_by_patterns(bookings_candidates)
+    # bookings: try many variants, also totservices/billdservices as fallback
+    bookings_col = pick('noofbookings','no_of_bookings','number_of_bookings','bookings','booked','requests','request','totservices','billdservices')
     if bookings_col:
         diag['mapped']['noofbookings'] = bookings_col
         df[bookings_col] = pd.to_numeric(df[bookings_col], errors='coerce')
-        # create canonical column
         df['noofbookings'] = df.get('noofbookings', df[bookings_col])
     else:
-        diag['warnings'].append("No obvious bookings column found by name.")
+        diag['warnings'].append("no bookings-like column found")
 
     # delivered
-    delivered_candidates = ['delivered', 'delivered_count', 'supplied', 'fulfilled', 'delv', 'delivered_no']
-    delivered_col = choose_col_by_patterns(delivered_candidates)
+    delivered_col = pick('delivered','delv','supplied','fulfilled','supply')
     if delivered_col:
         diag['mapped']['delivered'] = delivered_col
         df[delivered_col] = pd.to_numeric(df[delivered_col], errors='coerce')
         df['delivered'] = df.get('delivered', df[delivered_col])
     else:
-        diag['warnings'].append("No obvious delivered column found by name.")
+        diag['warnings'].append("no delivered-like column found")
 
-    # date detection (explicit date column)
-    date_col = choose_col_by_patterns(['date', 'booking_date', 'req_date', 'request_date', 'dt'])
+    # date/year/month: multiple patterns & month-name parsing
+    date_col = pick('date','booking_date','request_date','req_date','created_at')
     if date_col:
+        df['date'] = pd.to_datetime(df[date_col], errors='coerce')
+        diag['mapped']['date_from'] = date_col
+
+    # year/month columns that could be strings like 'March' or 'Mar'
+    year_col = pick('year')
+    month_col = pick('month','mon')
+    if month_col and month_col in df.columns:
+        # attempt to parse textual months to numbers
+        def month_to_num(x):
+            if pd.isna(x): return None
+            s = str(x).strip()
+            if s.isdigit():
+                return int(s)
+            # try month name
+            try:
+                return list(calendar.month_abbr).index(s[:3].title())
+            except Exception:
+                try:
+                    return list(calendar.month_name).index(s.title())
+                except Exception:
+                    return None
+        df[month_col + "_num"] = df[month_col].apply(month_to_num)
+        if df[month_col + "_num"].notna().any():
+            df['month'] = df.get('month', df[month_col + "_num"])
+            diag['mapped']['month_from_text'] = month_col
+
+    # if year+month present combine into date
+    if year_col and month_col and year_col in df.columns and month_col in df.columns:
         try:
-            df['date'] = pd.to_datetime(df[date_col], errors='coerce')
-            diag['mapped']['date_from'] = date_col
+            y = pd.to_numeric(df[year_col], errors='coerce')
+            m = pd.to_numeric(df[month_col], errors='coerce').fillna(df.get(month_col + "_num"))
+            mask = y.notna() & m.notna()
+            if mask.any():
+                df.loc[mask, 'date'] = pd.to_datetime(y.fillna(0).astype(int).astype(str) + "-" + m.astype(int).astype(str).str.zfill(2) + "-01", errors='coerce')
+                diag['mapped']['date_from_year_month'] = (year_col, month_col)
         except Exception:
-            df['date'] = pd.to_datetime(df[date_col].astype(str), errors='coerce')
-            diag['mapped']['date_from'] = date_col
+            pass
 
-    # year + month columns
-    year_col = choose_col_by_patterns(['year'])
-    month_col = choose_col_by_patterns(['month', 'mon'])
-    if year_col and month_col:
-        df[year_col] = pd.to_numeric(df[year_col], errors='coerce')
-        df[month_col] = pd.to_numeric(df[month_col], errors='coerce')
-        mask = df[year_col].notna() & df[month_col].notna()
-        if mask.any():
-            df.loc[mask, 'date'] = pd.to_datetime(
-                df.loc[mask, year_col].astype(int).astype(str) + "-" +
-                df.loc[mask, month_col].astype(int).astype(str).str.zfill(2) + "-01",
-                errors='coerce'
-            )
-            diag['mapped']['date_from_year_month'] = (year_col, month_col)
+    # fallback from filename patterns in _source_file
+    if (('date' not in df.columns) or df['date'].isna().all()) and filename_hint_col in df.columns:
+        def try_from_filename(s):
+            if not isinstance(s, str): return (None, None)
+            # handle multiple formats, look for like 2024_3 or 2024-03 or 202403
+            m = re.search(r'(20\d{2})[^\d]?(0?[1-9]|1[0-2])', s)
+            if m:
+                return int(m.group(1)), int(m.group(2))
+            m2 = re.search(r'(0?[1-9]|1[0-2])[^\d]?(20\d{2})', s)
+            if m2:
+                return int(m2.group(2)), int(m2.group(1))
+            return (None, None)
+        ym = df[filename_hint_col].apply(lambda x: try_from_filename(str(x)))
+        df['__src_y'] = ym.apply(lambda t: t[0])
+        df['__src_m'] = ym.apply(lambda t: t[1])
+        mask2 = df['__src_y'].notna() & df['__src_m'].notna()
+        if mask2.any():
+            df.loc[mask2, 'date'] = pd.to_datetime(df.loc[mask2, '__src_y'].astype(int).astype(str) + "-" + df.loc[mask2, '__src_m'].astype(int).astype(str).str.zfill(2) + "-01", errors='coerce')
+            diag['mapped']['date_from_source_file'] = True
 
-    # fallback: parse filename hints like tankers_reports_2024_3.csv from _source_file
-    if ('date' not in df.columns) or df['date'].isna().all():
-        if filename_hint_col in df.columns:
-            def extract_ym_from_name(s):
-                if not isinstance(s, str):
-                    return (None, None)
-                # patterns like 2024_03, 2024-03, 202403, _2024_3
-                m = re.search(r'(?P<y>20\d{2})[._-]?(?P<m>0?[1-9]|1[0-2])', s)
-                if m:
-                    return int(m.group('y')), int(m.group('m'))
-                return (None, None)
-
-            ym = df[filename_hint_col].apply(lambda s: extract_ym_from_name(s))
-            df['__src_year'] = ym.apply(lambda t: t[0])
-            df['__src_month'] = ym.apply(lambda t: t[1])
-            mask2 = df['__src_year'].notna() & df['__src_month'].notna()
-            if mask2.any():
-                df.loc[mask2, 'date'] = pd.to_datetime(
-                    df.loc[mask2, '__src_year'].astype(int).astype(str) + "-" +
-                    df.loc[mask2, '__src_month'].astype(int).astype(str).str.zfill(2) + "-01",
-                    errors='coerce'
-                )
-                diag['mapped']['date_from_source_file'] = True
-
-    # final helpers
+    # helpers
     if 'date' in df.columns:
-        try:
-            df['month_iso'] = df['date'].dt.strftime('%Y-%m')
-            df['year_month'] = df['date'].dt.to_period('M').astype(str)
-            if 'year' not in df.columns or df['year'].isna().all():
-                df['year'] = df['date'].dt.year
-            if 'month' not in df.columns or df['month'].isna().all():
-                df['month'] = df['date'].dt.month
-        except Exception:
-            diag['warnings'].append("date present but dt conversion failed for helpers")
+        df['month_iso'] = df['date'].dt.strftime('%Y-%m')
+        df['year'] = df.get('year', df['date'].dt.year)
+        df['month'] = df.get('month', df['date'].dt.month)
 
-    # ensure numeric types
+    # coerce numeric columns
     for c in ['noofbookings', 'delivered', 'year', 'month']:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors='coerce')
 
-    # remove temp helpers
-    for c in ['__src_year', '__src_month']:
-        if c in df.columns:
-            df.drop(columns=[c], inplace=True)
+    # drop temp helpers
+    for h in ['__src_y','__src_m'] + [col for col in df.columns if col.endswith("_num")]:
+        if h in df.columns:
+            df.drop(columns=[h], inplace=True)
 
-    diag['counts'] = {
-        'rows': len(df),
-        'date_nonnull': int(df['date'].notna().sum()) if 'date' in df.columns else 0,
-        'month_nonnull': int(df['month'].notna().sum()) if 'month' in df.columns else 0,
-        'bookings_nonnull': int(df['noofbookings'].notna().sum()) if 'noofbookings' in df.columns else 0,
-        'delivered_nonnull': int(df['delivered'].notna().sum()) if 'delivered' in df.columns else 0,
-    }
-
+    diag['counts'] = {'rows': len(df), 'date_nonnull': int(df.get('date').notna().sum() if 'date' in df else 0),
+                      'bookings_nonnull': int(df.get('noofbookings').notna().sum() if 'noofbookings' in df else 0),
+                      'delivered_nonnull': int(df.get('delivered').notna().sum() if 'delivered' in df else 0)}
     return df, diag
 
 
