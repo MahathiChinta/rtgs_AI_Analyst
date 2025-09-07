@@ -5,7 +5,10 @@ sentence-transformers>=2.2.2
 faiss-cpu
 tqdm
 python-dotenv
-openai
 sentence-transformers
 scikit-learn
 joblib
+streamlit
+matplotlib
+pyyaml
+google-generativeai
