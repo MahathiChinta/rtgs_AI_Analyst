@@ -45,6 +45,8 @@ This prints top-k sections and saves a CSV + PNG in outputs/plots.
 
 streamlit run src/app_streamlit.py
 
+--- 
+
 ## ⚙️ Requirements & Setup
 
 ### Install Dependencies
@@ -66,6 +68,7 @@ GEMINI_MODEL=gemini-2.5-pro
 DEFAULT_TEMPERATURE=0.0
 
 DEFAULT_MAX_TOKENS=300
+---
 
 ## 🔑 Why This Is Data-Agnostic
 
@@ -73,6 +76,8 @@ DEFAULT_MAX_TOKENS=300
 - Filename/Source Inference — extracts year/month from _source_file (e.g., tankers_reports_2024_3.csv).
 - Flexible RAG Builder — generates passages regardless of dataset schema.
 - Fallback Analytics — if LLM says "Insufficient evidence", deterministic numeric summaries run automatically.
+
+---
 
 ## 🖥 Demo Flow
 ### 1. Run the full pipeline:
@@ -87,13 +92,40 @@ python src/quick_analytics.py --in data/cleaned/tankers_cleaned_enhanced.csv --g
 ### 4. Launch Streamlit dashboard:
 streamlit run src/app_streamlit.py
 
+---
 
+## 📂 Project Outputs
 
+All generated outputs are organized under the `outputs/` folder with clear subdirectories:
 
+- `outputs/plots/` → Charts & summaries (e.g., top sections by number of bookings).
+- `outputs/profiles/` → Data profiles & schema mappings for auditability.
+- `outputs/final/` → Curated final outputs for submission:
+  - Evidence JSON
+  - Validation reports
+  - Profiles
+  - Final report markdown
+- `outputs/rag/` → Passages and embeddings used for semantic search.
 
+This ensures the pipeline remains **data-agnostic** and can adapt to any structured CSV input with minimal changes.
 
+---
 
+## 🏗️ System Architecture
 
+Below is the high-level flow of the system:
+
+1. **Raw Data Ingestion** → Merge multiple tanker report CSVs into a unified dataset.  
+2. **Enhanced Cleaning & Mapping** → Canonicalize column names (`noofbookings`, `delivered`, `date`, etc.), infer missing values, and verify mappings.  
+3. **Validation & Profiling** → Generate schema mappings, quality reports, and profiles.  
+4. **RAG Builder** → Build passages + embeddings for semantic search.  
+5. **Semantic Q&A** → Evidence-grounded question answering using Gemini + deterministic fallback.  
+6. **Analytics** → Quick summaries and charts for policy insights.  
+7. **Interfaces** →  
+   - **CLI** for analysts (terminal interaction).  
+   - **Streamlit Dashboard** for interactive exploration.  
+
+--- 
 
 ## Highlights
 - Data-Agnostic Design — no hardcoding to tanker dataset, adaptable to any structured CSV.
@@ -102,8 +134,6 @@ streamlit run src/app_streamlit.py
 - Dual UX — CLI for reproducibility, Streamlit for user-friendly dashboard.
 - End-to-End Pipeline — ingestion, cleaning, validation, RAG, Q&A in one command.
 
-
-
-
+---
 
 **Project Owner:** Shanmukha Mahathi Chinta
