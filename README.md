@@ -54,12 +54,12 @@ pip install -r requirements.txt
 
 ### For Streamlit Cloud → secrets.toml
 [secrets]
-GEMINI_API_KEY = "sk-xxxxxxxxxxxxxxxxxxxxx"
+GEMINI_API_KEY = "xxxxxxxxxxxxxxxxxxxxx"
 
 GEMINI_MODEL = "gemini-2.5-pro"
 
 ### Local .env file
-GEMINI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxx
+GEMINI_API_KEY=xxxxxxxxxxxxxxxxxxxxx
 
 GEMINI_MODEL=gemini-2.5-pro
 
